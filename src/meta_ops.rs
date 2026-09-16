@@ -44,6 +44,33 @@ pub enum MetaMethod {
 }
 
 impl MetaMethod {
+    pub const ALL: [MetaMethod; 24] = [
+        MetaMethod::Len,
+        MetaMethod::Index,
+        MetaMethod::NewIndex,
+        MetaMethod::Call,
+        MetaMethod::Pairs,
+        MetaMethod::ToString,
+        MetaMethod::Eq,
+        MetaMethod::Add,
+        MetaMethod::Sub,
+        MetaMethod::Mul,
+        MetaMethod::Div,
+        MetaMethod::Mod,
+        MetaMethod::Pow,
+        MetaMethod::Unm,
+        MetaMethod::IDiv,
+        MetaMethod::BAnd,
+        MetaMethod::BOr,
+        MetaMethod::BXor,
+        MetaMethod::BNot,
+        MetaMethod::Shl,
+        MetaMethod::Shr,
+        MetaMethod::Concat,
+        MetaMethod::Lt,
+        MetaMethod::Le,
+    ];
+
     pub const fn name(self) -> &'static str {
         match self {
             MetaMethod::Len => "__len",
@@ -110,7 +137,7 @@ impl MetaMethod {
 
 impl<'gc> IntoValue<'gc> for MetaMethod {
     fn into_value(self, ctx: Context<'gc>) -> Value<'gc> {
-        self.name().into_value(ctx)
+        ctx.metamethod_name(self).into()
     }
 }
 

@@ -12,7 +12,7 @@ use crate::{
     stdlib::{load_base, load_coroutine, load_io, load_math, load_string, load_table},
     string::InternedStringSet,
     thread::BadThreadMode,
-    Error, ExternError, FromMultiValue, FromValue, Fuel, IntoValue, Registry, RuntimeError,
+    Error, ExternError, FromMultiValue, MetaMethod, FromValue, Fuel, IntoValue, Registry, RuntimeError,
     Singleton, StashedExecutor, String, Table, TypeError, Value,
 };
 
@@ -54,6 +54,11 @@ impl<'gc> Context<'gc> {
     /// This can also be done automatically with `Deref` coercion.
     pub fn mutation(self) -> &'gc Mutation<'gc> {
         self.mutation
+    }
+
+    #[inline]
+    pub(crate) fn metamethod_name(self, method: MetaMethod) -> String<'gc> {
+        self.state.metamethod_names[method as usize]
     }
 
     pub fn globals(self) -> Table<'gc> {
@@ -298,15 +303,20 @@ struct State<'gc> {
     registry: Registry<'gc>,
     strings: InternedStringSet<'gc>,
     finalizers: Finalizers<'gc>,
+    /// interned metamethod names indexed by `MetaMethod`, so metatable lookups don't re-intern them
+    metamethod_names: [String<'gc>; MetaMethod::ALL.len()],
 }
 
 impl<'gc> State<'gc> {
     fn new(mc: &Mutation<'gc>) -> State<'gc> {
+        let strings = InternedStringSet::new(mc);
         Self {
             globals: Table::new(mc),
             registry: Registry::new(mc),
-            strings: InternedStringSet::new(mc),
+            strings,
             finalizers: Finalizers::new(mc),
+            metamethod_names: MetaMethod::ALL
+                .map(|m| strings.intern_static(mc, m.name().as_bytes())),
         }
     }
 
