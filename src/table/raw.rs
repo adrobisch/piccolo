@@ -479,7 +479,7 @@ impl<'gc> RawTable<'gc> {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Collect)]
+#[derive(Debug, Copy, Clone, Eq, Hash, Collect)]
 #[collect(no_drop)]
 enum CanonicalKey<'gc> {
     Boolean(bool),
@@ -491,6 +491,28 @@ enum CanonicalKey<'gc> {
     Callback(Callback<'gc>),
     Thread(Thread<'gc>),
     UserData(UserData<'gc>),
+}
+
+impl<'gc> PartialEq for CanonicalKey<'gc> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        match (*self, *other) {
+            (CanonicalKey::Boolean(a), CanonicalKey::Boolean(b)) => a == b,
+            (CanonicalKey::Integer(a), CanonicalKey::Integer(b)) => a == b,
+            (CanonicalKey::Number(a), CanonicalKey::Number(b)) => a == b,
+            // interned strings are usually the same object; the stored hash rejects most others
+            (CanonicalKey::String(a), CanonicalKey::String(b)) => {
+                Gc::ptr_eq(a.into_inner(), b.into_inner())
+                    || (a.stored_hash() == b.stored_hash() && a.as_bytes() == b.as_bytes())
+            }
+            (CanonicalKey::Table(a), CanonicalKey::Table(b)) => a == b,
+            (CanonicalKey::Closure(a), CanonicalKey::Closure(b)) => a == b,
+            (CanonicalKey::Callback(a), CanonicalKey::Callback(b)) => a == b,
+            (CanonicalKey::Thread(a), CanonicalKey::Thread(b)) => a == b,
+            (CanonicalKey::UserData(a), CanonicalKey::UserData(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl<'gc> CanonicalKey<'gc> {
@@ -586,6 +608,7 @@ impl<'gc> Key<'gc> {
         }
     }
 
+    #[inline]
     fn eq(self, key: CanonicalKey<'gc>) -> bool {
         match (self, key) {
             (Key::Live(a), b) => a == b,

@@ -208,6 +208,7 @@ impl<'gc, T> PartialEq<T> for String<'gc>
 where
     T: ?Sized + AsRef<[u8]>,
 {
+    #[inline]
     fn eq(&self, other: &T) -> bool {
         self.as_bytes() == other.as_ref()
     }
