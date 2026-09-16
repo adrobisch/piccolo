@@ -337,14 +337,16 @@ pub fn load_random<'gc>(ctx: Context<'gc>, math: Table<'gc>) {
                     (Some(high), Some(low)) => {
                         let high_bytes = high.to_ne_bytes();
                         let low_bytes = low.to_ne_bytes();
-                        let seed: [u8; 32] = core::array::from_fn(|idx| {
+                        // the seed is 32 bytes on 64-bit targets but 16 on 32-bit ones (wasm32)
+                        let mut seed = <SmallRng as SeedableRng>::Seed::default();
+                        for (idx, b) in seed.iter_mut().enumerate() {
                             let idx_mod_16 = idx % 16;
-                            if idx_mod_16 >= 8 {
+                            *b = if idx_mod_16 >= 8 {
                                 high_bytes[idx_mod_16 - 8]
                             } else {
                                 low_bytes[idx_mod_16]
-                            }
-                        });
+                            };
+                        }
                         *rng.borrow_mut() = SmallRng::from_seed(seed);
                         Some(())
                     }
