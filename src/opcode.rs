@@ -656,6 +656,7 @@ impl OpCode {
         })
     }
 
+    #[inline(always)]
     pub fn decode(self) -> Operation {
         match self.0 {
             OpCodeRepr::Move { dest, source } => Operation::Move { dest, source },

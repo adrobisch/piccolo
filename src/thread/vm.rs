@@ -31,6 +31,7 @@ pub(super) fn run_vm<'gc>(
     let mut registers = lua_frame.registers();
     let mut instructions_run = 0;
 
+    #[inline(always)]
     fn get_rc<'gc>(
         stack_frame: &[Value<'gc>],
         constants: &[Constant<String<'gc>>],
