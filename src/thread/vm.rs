@@ -16,6 +16,43 @@ use super::{thread::LuaFrame, VMError};
 // changed.
 //
 // Returns the number of instructions that were run.
+/// Fast paths for number operands, avoiding the out-of-line metamethod machinery; the same results
+/// as `Constant`'s operations. Anything else (strings, metamethods) goes through `meta_ops`.
+macro_rules! fast_arith {
+    ($name:ident, $int:ident, $op:tt) => {
+        #[inline(always)]
+        fn $name<'gc>(l: Value<'gc>, r: Value<'gc>) -> Option<Value<'gc>> {
+            Some(match (l, r) {
+                (Value::Integer(a), Value::Integer(b)) => Value::Integer(a.$int(b)),
+                (Value::Number(a), Value::Number(b)) => Value::Number(a $op b),
+                (Value::Integer(a), Value::Number(b)) => Value::Number(a as f64 $op b),
+                (Value::Number(a), Value::Integer(b)) => Value::Number(a $op b as f64),
+                _ => return None,
+            })
+        }
+    };
+}
+fast_arith!(fast_add, wrapping_add, +);
+fast_arith!(fast_sub, wrapping_sub, -);
+fast_arith!(fast_mul, wrapping_mul, *);
+
+macro_rules! fast_cmp {
+    ($name:ident, $op:tt) => {
+        #[inline(always)]
+        fn $name<'gc>(l: Value<'gc>, r: Value<'gc>) -> Option<Value<'gc>> {
+            Some(Value::Boolean(match (l, r) {
+                (Value::Integer(a), Value::Integer(b)) => a $op b,
+                (Value::Number(a), Value::Number(b)) => a $op b,
+                (Value::Integer(a), Value::Number(b)) => (a as f64) $op b,
+                (Value::Number(a), Value::Integer(b)) => a $op (b as f64),
+                _ => return None,
+            }))
+        }
+    };
+}
+fast_cmp!(fast_less, <);
+fast_cmp!(fast_less_eq, <=);
+
 pub(super) fn run_vm<'gc>(
     ctx: Context<'gc>,
     mut lua_frame: LuaFrame<'gc, '_>,
@@ -442,7 +479,7 @@ pub(super) fn run_vm<'gc>(
             } => {
                 let left = get_rc(&registers.stack_frame, &current_prototype.constants, left);
                 let right = get_rc(&registers.stack_frame, &current_prototype.constants, right);
-                match meta_ops::less_than(ctx, left, right)? {
+                match fast_less(left, right).map_or_else(|| meta_ops::less_than(ctx, left, right), |v| Ok(MetaResult::Value(v)))? {
                     MetaResult::Value(v) => {
                         if v.to_bool() == skip_if {
                             *registers.pc += 1;
@@ -467,7 +504,7 @@ pub(super) fn run_vm<'gc>(
             } => {
                 let left = get_rc(&registers.stack_frame, &current_prototype.constants, left);
                 let right = get_rc(&registers.stack_frame, &current_prototype.constants, right);
-                match meta_ops::less_equal(ctx, left, right)? {
+                match fast_less_eq(left, right).map_or_else(|| meta_ops::less_equal(ctx, left, right), |v| Ok(MetaResult::Value(v)))? {
                     MetaResult::Value(v) => {
                         if v.to_bool() == skip_if {
                             *registers.pc += 1;
@@ -525,7 +562,7 @@ pub(super) fn run_vm<'gc>(
             Operation::Add { dest, left, right } => {
                 let left = get_rc(&registers.stack_frame, &current_prototype.constants, left);
                 let right = get_rc(&registers.stack_frame, &current_prototype.constants, right);
-                match meta_ops::add(ctx, left, right)? {
+                match fast_add(left, right).map_or_else(|| meta_ops::add(ctx, left, right), |v| Ok(MetaResult::Value(v)))? {
                     MetaResult::Value(v) => registers.stack_frame[dest.0 as usize] = v,
                     MetaResult::Call(call) => {
                         lua_frame.call_meta_function(
@@ -542,7 +579,7 @@ pub(super) fn run_vm<'gc>(
             Operation::Sub { dest, left, right } => {
                 let left = get_rc(&registers.stack_frame, &current_prototype.constants, left);
                 let right = get_rc(&registers.stack_frame, &current_prototype.constants, right);
-                match meta_ops::subtract(ctx, left, right)? {
+                match fast_sub(left, right).map_or_else(|| meta_ops::subtract(ctx, left, right), |v| Ok(MetaResult::Value(v)))? {
                     MetaResult::Value(v) => registers.stack_frame[dest.0 as usize] = v,
                     MetaResult::Call(call) => {
                         lua_frame.call_meta_function(
@@ -559,7 +596,7 @@ pub(super) fn run_vm<'gc>(
             Operation::Mul { dest, left, right } => {
                 let left = get_rc(&registers.stack_frame, &current_prototype.constants, left);
                 let right = get_rc(&registers.stack_frame, &current_prototype.constants, right);
-                match meta_ops::multiply(ctx, left, right)? {
+                match fast_mul(left, right).map_or_else(|| meta_ops::multiply(ctx, left, right), |v| Ok(MetaResult::Value(v)))? {
                     MetaResult::Value(v) => registers.stack_frame[dest.0 as usize] = v,
                     MetaResult::Call(call) => {
                         lua_frame.call_meta_function(
